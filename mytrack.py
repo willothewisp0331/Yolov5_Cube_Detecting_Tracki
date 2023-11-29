@@ -37,6 +37,7 @@ from pathlib import Path
 
 from tracker import *
 import numpy as np
+import keyboard
 
 import torch
 
@@ -89,6 +90,7 @@ def run(
 ):
 
     source = str(source)
+    print(f'source = {source}')
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     is_file = Path(source).suffix[1:] in (IMG_FORMATS + VID_FORMATS)
     is_url = source.lower().startswith(('rtsp://', 'rtmp://', 'http://', 'https://'))
@@ -108,13 +110,14 @@ def run(
     imgsz = check_img_size(imgsz, s=stride)  # check image size
 
     ########## custom define ###################
-    roi = [141, 334, 542, 560]
+    roi = [141, 334, 542, 560] # region of interest
     counts = {cube: 0 for cube in names.values()}  # count drop number each class
     drop_id = {cube: 0 for cube in names.values()} # record past drop id
+
     # define drop sensor
     drop_sensor = np.array([[191, 505], [194, 525], [215, 497], [485, 493], [509, 530], [528, 528], [497, 471], [210, 479]], np.int32)
-    show_sensor = False
-    drop_sensor = drop_sensor.reshape((-1, 1, 2))
+    show_sensor = False # print the sensor outline or not
+    drop_sensor = drop_sensor.reshape((-1, 1, 2)) # do not change this
     ############################################
 
     # Dataloader
@@ -133,7 +136,18 @@ def run(
     model.warmup(imgsz=(1 if pt or model.triton else bs, 3, *imgsz))  # warmup
     seen, windows, dt = 0, [], (Profile(), Profile(), Profile())
     for path, im, im0s, vid_cap, s in dataset:
-        im0s = cv2.resize(im0s, (640, 640)) # video resize to 640*640
+        if webcam:
+            im0s[0] = cv2.resize(im0s[0], (640, 640))
+        else:
+            im0s = cv2.resize(im0s, (640, 640)) # video resize to 640*640
+        press_key = cv2.waitKeyEx(1)
+
+        # if press_key == ord('r') or press_key == ord('R'):
+        #     print("reset")
+        #     for keys in counts:
+        #         counts[keys] = 0
+        # else:
+        #     print("n")
         with dt[0]:
             im = torch.from_numpy(im).to(model.device)
             im = im.half() if model.fp16 else im.float()  # uint8 to fp16/32
@@ -168,6 +182,7 @@ def run(
 
         # Process predictions
         for i, det in enumerate(pred):  # per image
+            drop_r = {cube: False for cube in names.values()}  # drop or not
             seen += 1
             if webcam:  # batch_size >= 1
                 p, im0, frame = path[i], im0s[i].copy(), dataset.count
@@ -218,11 +233,11 @@ def run(
                         if cls in names:
                             counts[label] += 1
                             drop_id[label] = id
+                            drop_r[label] = True
                     xyxy[0] = torch.tensor(xyxy[0])
                     xyxy[1] = torch.tensor(xyxy[1])
                     xyxy[2] = torch.tensor(xyxy[2])
                     xyxy[3] = torch.tensor(xyxy[3])
-
 
                     if save_csv:
                         write_to_csv(p.name, label, confidence_str)
@@ -240,7 +255,7 @@ def run(
                         text_y = 60
                         for key, value in counts.items():
                             text_y += 40
-                            cv2.putText(im0, (f"{key}: {value}"), (10, text_y), cv2.FONT_HERSHEY_TRIPLEX, 1, (0, 0, 0), 2)
+                            cv2.putText(im0, (f"{key}: {value}"), (10, text_y), cv2.FONT_HERSHEY_TRIPLEX, 1, (0, 0, 255) if drop_r[key] else (0, 0, 0), 3 if drop_r[key] else 2)
                     if save_crop:
                         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 
@@ -287,11 +302,10 @@ def run(
         strip_optimizer(weights[0])  # update model (to fix SourceChangeWarning)
 
 
-
 def parse_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default='best.pt', help='model path or triton URL')
-    parser.add_argument('--source', type=str, default='../short_demo.mp4', help='file/dir/URL/glob/screen/0(webcam)')
+    parser.add_argument('--source', type=str, default='../short_demo640.mp4', help='file/dir/URL/glob/screen/0(webcam)')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='(optional) dataset.yaml path')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
     parser.add_argument('--conf-thres', type=float, default=0.7, help='confidence threshold')
