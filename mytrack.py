@@ -113,6 +113,7 @@ def run(
     roi = [141, 334, 542, 560] # region of interest
     counts = {cube: 0 for cube in names.values()}  # count drop number each class
     drop_id = {cube: 0 for cube in names.values()} # record past drop id
+    drop_list = []
 
     # define drop sensor
     drop_sensor = np.array([[191, 505], [194, 525], [215, 497], [485, 493], [509, 530], [528, 528], [497, 471], [210, 479]], np.int32)
@@ -220,6 +221,8 @@ def run(
                     c = int(cls)
                     coord.append([x1, y1, x2, y2, confidence, c])
                 boxes_ids = tracker.update(coord)
+                text_y = 60
+                text_x = 25
 
                 for *xyxy, conf, cls, id in boxes_ids:
                     c = int(cls)  # integer class
@@ -234,6 +237,9 @@ def run(
                             counts[label] += 1
                             drop_id[label] = id
                             drop_r[label] = True
+                            drop_list.append(label)
+                            if len(drop_list) > 5:
+                                drop_list.pop(0)
                     xyxy[0] = torch.tensor(xyxy[0])
                     xyxy[1] = torch.tensor(xyxy[1])
                     xyxy[2] = torch.tensor(xyxy[2])
@@ -252,13 +258,27 @@ def run(
                         c = int(cls)  # integer class
                         label = None if hide_labels else (names[c] if hide_conf else f'{id} {names[c]} {conf:.2f}')
                         annotator.box_label(xyxy, label, color=colors(c, True))
-                        text_y = 60
-                        for key, value in counts.items():
-                            text_y += 40
-                            cv2.putText(im0, (f"{key}: {value}"), (10, text_y), cv2.FONT_HERSHEY_TRIPLEX, 1, (0, 0, 255) if drop_r[key] else (0, 0, 0), 3 if drop_r[key] else 2)
                     if save_crop:
                         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 
+                # text
+                for key, value in counts.items():
+                    text_y += 30
+                    cv2.putText(im0, (f"{key}: {value}"), (10, text_y), cv2.FONT_HERSHEY_TRIPLEX, 0.8, (0, 0, 255) if drop_r[key] else (5, 209, 255), 3 if drop_r[key] else 1, cv2.LINE_AA)
+                count_j = 0
+                last_j = False
+                for j in drop_list:
+                    if count_j == len(drop_list)-1 :
+                        last_j = True
+                    text_size, baseline = cv2.getTextSize("{:^{}}".format(j, 9), cv2.FONT_HERSHEY_TRIPLEX, 0.6, 1)
+                    rect_x = text_x - 5
+                    rect_y = 40 - text_size[1] - 5
+                    rect_width = text_size[0] + 10
+                    rect_height = text_size[1] + baseline + 5
+                    cv2.rectangle(im0, (rect_x, rect_y), (rect_x + rect_width, rect_y + rect_height), (255, 255, 255) if last_j else (0, 0, 0), thickness=cv2.FILLED)
+                    cv2.putText(im0, "{:^{}}".format(j, 9), (text_x, 40), cv2.FONT_HERSHEY_TRIPLEX, 0.7, (255, 255, 128), 1, cv2.LINE_AA)
+                    text_x += text_size[0] + 10
+                    count_j += 1
             # Stream results
             im0 = annotator.result()
             if view_img:
@@ -305,7 +325,7 @@ def run(
 def parse_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default='best.pt', help='model path or triton URL')
-    parser.add_argument('--source', type=str, default='../short_demo640.mp4', help='file/dir/URL/glob/screen/0(webcam)')
+    parser.add_argument('--source', type=str, default='../demo640.mp4', help='file/dir/URL/glob/screen/0(webcam)')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='(optional) dataset.yaml path')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
     parser.add_argument('--conf-thres', type=float, default=0.7, help='confidence threshold')
