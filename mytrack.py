@@ -116,8 +116,9 @@ def run(
     drop_list = []
 
     # define drop sensor
-    drop_sensor = np.array([[191, 505], [194, 525], [215, 497], [485, 493], [509, 530], [528, 528], [497, 471], [210, 479]], np.int32)
-    show_sensor = False # print the sensor outline or not
+    drop_sensor = np.array([[36, 558], [50, 568], [89, 513], [434, 527], [468, 580], [474, 558], [434, 506], [83, 492]], np.int32)
+    # drop_sensor = np.array([[191, 505], [194, 525], [215, 497], [485, 493], [509, 530], [528, 528], [497, 471], [210, 479]], np.int32)
+    show_sensor = True # print the sensor outline or not
     drop_sensor = drop_sensor.reshape((-1, 1, 2)) # do not change this
     ############################################
 
