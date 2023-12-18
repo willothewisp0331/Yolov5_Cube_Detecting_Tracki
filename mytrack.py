@@ -111,15 +111,20 @@ def run(
 
     ########## custom define ###################
     roi = [141, 334, 542, 560] # region of interest
+    names = {0: 'blue', 1: 'dog', 2: 'green', 3: 'lion', 4: 'penguin', 5: 'pig', 6: 'red', 7: 'sheep', 8: 'yellow', }
     counts = {cube: 0 for cube in names.values()}  # count drop number each class
-    drop_id = {cube: 0 for cube in names.values()} # record past drop id
     drop_list = []
+    drop_in_im = []
 
     # define drop sensor
-    drop_sensor = np.array([[36, 558], [50, 568], [89, 513], [434, 527], [468, 580], [474, 558], [434, 506], [83, 492]], np.int32)
-    # drop_sensor = np.array([[191, 505], [194, 525], [215, 497], [485, 493], [509, 530], [528, 528], [497, 471], [210, 479]], np.int32)
+    if webcam: #webcam or OBS
+        drop_sensor_big = np.array([[150, 350], [125, 375], [530, 380], [500, 354]], np.int32)
+    else: #video
+        drop_sensor_big = np.array([[160, 452], [135, 495], [520, 498], [495, 460]], np.int32)
+    # drop_sensor_big = np.array([[191, 505], [194, 525], [215, 497], [485, 493], [509, 530], [528, 528], [497, 471], [210, 479]], np.int32)
     show_sensor = True # print the sensor outline or not
-    drop_sensor = drop_sensor.reshape((-1, 1, 2)) # do not change this
+    drop_sensor_big = drop_sensor_big.reshape((-1, 1, 2)) # do not change this
+    num_drop = 0
     ############################################
 
     # Dataloader
@@ -138,21 +143,21 @@ def run(
     model.warmup(imgsz=(1 if pt or model.triton else bs, 3, *imgsz))  # warmup
     seen, windows, dt = 0, [], (Profile(), Profile(), Profile())
     for path, im, im0s, vid_cap, s in dataset:
-        if webcam:
-            im0s[0] = cv2.resize(im0s[0], (640, 640))
-        else:
-            im0s = cv2.resize(im0s, (640, 640)) # video resize to 640*640
-        press_key = cv2.waitKeyEx(1)
-
-        # if press_key == ord('r') or press_key == ord('R'):
-        #     print("reset")
-        #     for keys in counts:
-        #         counts[keys] = 0
+        # if webcam:
+        #     pass
+        #     # im0s[0] = cv2.resize(im0s[0], (640, 640))
+        #     # im = cv2.resize(im, (640, 640))
         # else:
-        #     print("n")
+        #     im0s = cv2.resize(im0s, (640, 640)) # video resize to 640*640
+        press_key = cv2.waitKeyEx(1)
+        if press_key == 32:
+            for keys in counts:
+                counts[keys] = 0
+            drop_list = []
+            num_drop = 0
         with dt[0]:
             im = torch.from_numpy(im).to(model.device)
-            im = im.half() if model.fp16 else im.float()  # uint8 to fp16/32
+            im = im.half() if model.fp16 else im.float()  # uint8 to fp16/32b
             im /= 255  # 0 - 255 to 0.0 - 1.0
             if len(im.shape) == 3:
                 im = im[None]  # expand for batch dim
@@ -183,6 +188,7 @@ def run(
 
 
         # Process predictions
+
         for i, det in enumerate(pred):  # per image
             drop_r = {cube: False for cube in names.values()}  # drop or not
             seen += 1
@@ -191,7 +197,6 @@ def run(
                 s += f'{i}: '
             else:
                 p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
-
             p = Path(p)  # to Path
             save_path = str(save_dir / p.name)  # im.jpg
             txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # im.txt
@@ -200,7 +205,7 @@ def run(
             imc = im0.copy() if save_crop else im0  # for save_crop
             annotator = Annotator(im0, line_width=line_thickness, example=str(names))
             if show_sensor:
-                cv2.polylines(im0, [drop_sensor], True, (0, 255, 255))
+                cv2.polylines(im0, [drop_sensor_big], True, (0, 255, 255))
 
             if len(det):
                 # Rescale boxes from img_size to im0 size
@@ -213,14 +218,14 @@ def run(
 
                 # Write results
                 coord = []
-                for *xyxy, conf, cls in reversed(det):
-                    x1 = int(xyxy[0])
-                    y1 = int(xyxy[1])
-                    x2 = int(xyxy[2])
-                    y2 = int(xyxy[3])
-                    confidence = float(conf)
-                    c = int(cls)
-                    coord.append([x1, y1, x2, y2, confidence, c])
+                for *xyxy1, conf1, cls1 in reversed(det):
+                    x1 = int(xyxy1[0])
+                    y1 = int(xyxy1[1])
+                    x2 = int(xyxy1[2])
+                    y2 = int(xyxy1[3])
+                    confidence1 = float(conf1)
+                    c1 = int(cls1)
+                    coord.append([x1, y1, x2, y2, confidence1, c1])
                 boxes_ids = tracker.update(coord)
                 text_y = 60
                 text_x = 25
@@ -231,14 +236,18 @@ def run(
                     confidence = float(conf)
                     confidence_str = f'{confidence:.2f}'
 
-                    result = cv2.pointPolygonTest(drop_sensor, (xyxy[0], xyxy[1]), False)
+                    if cls in [0, 2, 6, 8]:
+                        result = cv2.pointPolygonTest(drop_sensor_big, ((xyxy[0]+xyxy[2])/2, (xyxy[1]+xyxy[3])/2), False)
+                    else:
+                        result = cv2.pointPolygonTest(drop_sensor_big, ((xyxy[0]+xyxy[2])/2, (xyxy[1]+xyxy[3])/2), False)
 
-                    if result > 0 and id != drop_id[label]:
+                    if result > 0 and id not in drop_in_im:
                         if cls in names:
+                            drop_in_im.append(id)
                             counts[label] += 1
-                            drop_id[label] = id
                             drop_r[label] = True
-                            drop_list.append(label)
+                            drop_list.append(str(num_drop)+label)
+                            num_drop += 1
                             if len(drop_list) > 5:
                                 drop_list.pop(0)
                     xyxy[0] = torch.tensor(xyxy[0])
@@ -257,7 +266,7 @@ def run(
 
                     if save_img or save_crop or view_img:  # Add bbox to image
                         c = int(cls)  # integer class
-                        label = None if hide_labels else (names[c] if hide_conf else f'{id} {names[c]} {conf:.2f}')
+                        label = None if hide_labels else (names[c] if hide_conf else f'{id%10000} {names[c]} {conf:.2f}')
                         annotator.box_label(xyxy, label, color=colors(c, True))
                     if save_crop:
                         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
@@ -304,8 +313,7 @@ def run(
                             w = 640 # int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                             h = 640 # int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                         else:  # stream
-                            # fps, w, h = 30, im0.shape[1], im0.shape[0]
-                            fps, w, h = 30, 640, 640
+                            fps, w, h = 30, im0.shape[1], im0.shape[0]
                         save_path = str(Path(save_path).with_suffix('.mp4'))  # force *.mp4 suffix on results videos
                         vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                     vid_writer[i].write(im0)
@@ -325,12 +333,12 @@ def run(
 
 def parse_opt():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', nargs='+', type=str, default='best.pt', help='model path or triton URL')
-    parser.add_argument('--source', type=str, default='../demo640.mp4', help='file/dir/URL/glob/screen/0(webcam)')
+    parser.add_argument('--weights', nargs='+', type=str, default='32.engine', help='model path or triton URL')
+    parser.add_argument('--source', type=str, default='1', help='file/dir/URL/glob/screen/0(webcam)')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='(optional) dataset.yaml path')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
-    parser.add_argument('--conf-thres', type=float, default=0.7, help='confidence threshold')
-    parser.add_argument('--iou-thres', type=float, default=0.3, help='NMS IoU threshold')
+    parser.add_argument('--conf-thres', type=float, default=0.8, help='confidence threshold')
+    parser.add_argument('--iou-thres', type=float, default=0.5, help='NMS IoU threshold')
     parser.add_argument('--max-det', type=int, default=1000, help='maximum detections per image')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-img', action='store_true', help='show results')
