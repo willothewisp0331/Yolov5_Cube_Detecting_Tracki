@@ -110,8 +110,7 @@ def run(
     imgsz = check_img_size(imgsz, s=stride)  # check image size
 
     ########## custom define ###################
-    roi = [141, 334, 542, 560] # region of interest
-    names = {0: 'blue', 1: 'dog', 2: 'green', 3: 'lion', 4: 'penguin', 5: 'pig', 6: 'red', 7: 'sheep', 8: 'yellow', }
+    names = {0: 'dog', 1: 'hippo', 2: 'pig', 3: 'lion', 4: 'penguin', 5: 'green', 6: 'red', 7: 'yellow' }
     counts = {cube: 0 for cube in names.values()}  # count drop number each class
     drop_list = []
     drop_in_im = []
@@ -120,8 +119,8 @@ def run(
     if webcam: #webcam or OBS
         drop_sensor_big = np.array([[150, 350], [125, 375], [530, 380], [500, 354]], np.int32)
     else: #video
-        drop_sensor_big = np.array([[160, 452], [135, 495], [520, 498], [495, 460]], np.int32)
-    # drop_sensor_big = np.array([[191, 505], [194, 525], [215, 497], [485, 493], [509, 530], [528, 528], [497, 471], [210, 479]], np.int32)
+        drop_sensor_big = np.array([[85, 577], [57, 622], [509, 630], [471, 584]], np.int32)
+
     show_sensor = True # print the sensor outline or not
     drop_sensor_big = drop_sensor_big.reshape((-1, 1, 2)) # do not change this
     num_drop = 0
@@ -333,8 +332,8 @@ def run(
 
 def parse_opt():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', nargs='+', type=str, default='32.engine', help='model path or triton URL')
-    parser.add_argument('--source', type=str, default='1', help='file/dir/URL/glob/screen/0(webcam)')
+    parser.add_argument('--weights', nargs='+', type=str, default='best.engine', help='model path or triton URL')
+    parser.add_argument('--source', type=str, default='../green.mkv', help='file/dir/URL/glob/screen/0(webcam)')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='(optional) dataset.yaml path')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
     parser.add_argument('--conf-thres', type=float, default=0.8, help='confidence threshold')
