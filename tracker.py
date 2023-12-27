@@ -16,26 +16,30 @@ class Tracker:
         objects_bbs_ids = []
 
         # Get center point of new object
-        num_obj = len(objects_rect)
-        for rect in objects_rect:
-            x, y, w, h, con, b= rect
+        num_obj = len(objects_rect) # the number of object in new frame
+
+        for rect in objects_rect: # Traverse all object in new frame
+            x, y, w, h, con, b = rect # record new object information
+            # center coordinate
             cx = (x + x + w) // 2
             cy = (y + y + h) // 2
 
             # Find out if that object was detected already
             same_object_detected = False
             dist_list = []
-            for id, pt in self.center_points.items():
-                xx, yy = pt[0]
-                n = pt[1]
-                dist = math.hypot(cx - xx, cy - yy)
-                dist_list.append(dist)
 
-            if len(dist_list) > 1:
+            # all object in last frame
+            for id, pt in self.center_points.items():
+                xx, yy = pt[0] # record old object information in last frame
+                n = pt[1]
+                dist = math.hypot(cx - xx, cy - yy) # calculate the distance between new objects and old objects
+                dist_list.append(dist) # record all distance into list in frame
+
+            if len(dist_list) > 1: # find the smallest distance if the dist_list > 1
                 min_dist = np.min(dist_list)
-                closest_obj = dist_list.index(min_dist)
+                closest_obj = dist_list.index(min_dist) # record index of the smallest
             else:
-                closest_obj = len(dist_list)
+                closest_obj = len(dist_list) # record index if no more than 1 object
             #
             # print(closest_obj)
             # print(self.center_points)
@@ -44,14 +48,14 @@ class Tracker:
                     id = key[0]
                     n = key[1][1]
                     dist = dist_list[i]
-                    if n in [0, 2, 6, 8]: # small cube
-                        if dist < 55 and n == b:
+                    if n in [5, 6, 7]: # small cube
+                        if dist < 45 and n == b:
                             self.center_points[id] = [(cx, cy), b]
                             objects_bbs_ids.append([x, y, w, h, con, b, id])
                             same_object_detected = True
                             break
                     else:  # big cube
-                        if dist < 50 and n == b:
+                        if dist < 60 and n == b:
                             self.center_points[id] = [(cx, cy), b]
                             objects_bbs_ids.append([x, y, w, h, con, b, id])
                             same_object_detected = True
